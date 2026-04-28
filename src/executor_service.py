@@ -41,26 +41,29 @@ class ExecutorService(MicroserviceBase):
         
         trajectories_data = message.get('trajectories', [])
         sut_info = message['sut_info']
+        # Extract port from metadata or default to 8000
+        sut_port = message.get('metadata', {}).get('port', 8000)
+        sut_url = f"http://localhost:{sut_port}"
         
         if not trajectories_data:
             return self._error(job_id, "No trajectories to execute")
         
-        self.logger.info(f"[{job_id}] Phase 4: Executing {len(trajectories_data)} trajectories")
+        self.logger.info(f"[{job_id}] Phase 4: Executing {len(trajectories_data)} trajectories on {sut_url}")
         
         # Reconstruct Trajectory objects
         trajectories = [Trajectory.from_dict(t) for t in trajectories_data]
-        test_count = len(trajectories)  # Save test count
+        test_count = len(trajectories)
         
         # Step 1: Generate tests
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
             
             try:
+                # Pass the custom SUT URL to the generator
                 test_file = self.test_generator.generate(trajectories, output_dir)
                 
-                # Step 2: Execute tests (with test count passed)
-                # Note: SUT must be running for this to work
-                exec_stats = self.test_executor.execute(test_file, test_count=test_count)
+                # Step 2: Execute tests
+                exec_stats = self.test_executor.execute(test_file, sut_url=sut_url, test_count=test_count)
                 
                 # Step 3: Mutation testing
                 # Find SUT path (from extracted_path in earlier phases)
